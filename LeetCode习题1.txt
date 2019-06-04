@@ -1,0 +1,36 @@
+#include<iostream>;
+#include<vector>;
+using namespace std;
+int main()
+{
+	cout << "请输入容器里面的数据" << endl;
+	vector<int> nums;
+	vector<int> ivec;
+	int i = 0;
+	while (cin>>i)
+	{
+		nums.push_back(i);
+	}
+	cin.clear();
+	cout << "请输入目标值" << endl;
+	int target = 0;
+	cin >> target;
+	int size1 = nums.size();
+	for (int j = 0; j <size1-1; j++)
+	{
+		for (int k = (j+1); k < size1; k++)//在进行两个for语句嵌套循环的时候一定要仔细
+		{
+			if (target==(nums[j]+nums[k]))
+			{
+				ivec.push_back(j);
+				ivec.push_back(k);
+			}
+		}
+	}
+	int size2 = ivec.size();
+	for (int l = 0; l < size2; l++)
+	{
+		cout << ivec[l] << "  ";
+	}
+	return 0;
+}
