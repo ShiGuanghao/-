@@ -1,0 +1,31 @@
+#include<iostream>;
+#include<vector>;
+using namespace std;
+int main()
+{
+	int i = 0;
+	vector<int> ivec;
+	cout << "请输入一组数据" << endl;
+	while (cin>>i)
+	{
+		ivec.push_back(i);
+	}
+	if (ivec.cbegin ()==ivec.cend ())
+	{
+		cout << "容器内没有数据" << endl;
+		return -1;
+	}
+	for (auto it=ivec.cbegin();it!=ivec.cend();++it)
+	{
+		if (it==(ivec.cend()-1))
+		{
+			cout << *it << endl;
+			break;
+		}
+		cout << *(it)+*(++it) << "  ";
+		if (((it-ivec.cbegin()+1)%10)==0)
+		{
+			cout << endl;
+		}
+	}
+}
