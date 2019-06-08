@@ -1,0 +1,46 @@
+#include<iostream>;
+#include<vector>;
+#include<ctime>;
+#include<cstdlib>;
+using namespace std;
+int main()
+{
+	const int sz = 5;
+	vector<int> vec1;
+	vector<int> vec2;
+	srand((unsigned)time(NULL));
+	for (int i = 0; i < sz; i++)
+	{
+		vec1.push_back(rand() % 5);
+	}
+	cout << "系统的数据已经生成完毕，请输入你的数据" << endl;
+	int ival = 0;
+	for (int i = 0; i < sz; i++)
+	{
+		if (cin>>ival)
+		{
+			vec2.push_back(ival);
+		}
+	}
+	for (auto c : vec1)
+	{
+		cout << c << "  ";
+	}
+	cout << endl;
+	for (auto c : vec2)
+	{
+		cout << c << "  ";
+	}
+	auto it1 = vec1.begin();
+	auto it2 = vec2.begin();
+	while (it1!=vec1.end()&&it2!=vec2.end())
+	{
+		if (*it1 != *it2)
+		{
+			cout << "你猜错了" << endl;
+			return -1;
+		}
+	}
+	cout << "你猜对了" << endl;
+	return 0;
+}
