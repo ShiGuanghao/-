@@ -1,0 +1,44 @@
+#include<iostream>;
+#include<ctime>;
+#include<cstdlib>;
+using namespace std;
+int main()
+{
+	const int sz = 5;
+	int ia1[sz] = {}, ia2[sz] = {};
+	srand((unsigned)time(NULL));
+	for (int i = 0; i < sz; i++)
+	{
+		ia1[i] = rand() % 10;
+	}
+	int ival = 0;
+	for (int i = 0; i < sz; i++)
+	{
+		if (cin >> ival)
+		{
+			ia2[i] = ival;
+		}
+	}
+	cout << "两个数组的内容如下" << endl;
+	for (auto c:ia1)
+	{
+		cout << c << " ";
+	}
+	cout << endl;
+	for (auto c : ia2)
+	{
+		cout << c << " ";
+	}
+	int *p1 = begin(ia1);
+	int *p2 = begin(ia2);
+	while (p1!=end(ia1)&&p2!=end(ia2))
+	{
+		if (*p1!=*p2)
+		{
+			cout << "错了" << endl;
+			return -1;
+		}
+	}
+	cout << "猜对了" << endl;
+	return 0;
+}
