@@ -1,0 +1,422 @@
+#include<iostream>
+#include<windows.h>
+#include<conio.h>//使用getch()
+#include<time.h>//要使用函数srand(time(0)), 使程序有随机性
+using namespace std;
+HANDLE handle;//用于设计输出坐标
+COORD crd;//用于设计输出坐标
+const short LMARGIN=7;//方块掉落范围的左边界
+const short TMARGIN=5;//方块掉落范围的上边界
+char type[19][17]=
+{
+	/*-------定义方块种类，以下形状均采用逆时针旋转--------*/
+	/*Z型0-1*/
+	"1100011000000000","0010011001000000",
+	/*S型2-3*/
+	"0110110000000000","0100011000100000",
+	/*I型4-5*/
+	"0000111100000000","0100010001000100",
+	/*方型6*/
+	"0000011001100000",
+	/*T型7-10*/
+	"0100111000000000","0100110001000000","1110010000000000","1000110010000000",
+	/*L型11-14*/
+	"0010111000000000","0110001000100000","1110100000000000","0100010001100000",
+	/*J型15-18*/
+	"1000111000000000","0010001001100000","1110001000000000","0110010001000000"
+};
+char rotate_hinder[19][17]=
+{
+	/*-------定义方块旋转受阻位置--------*/
+	/*Z型0-1*/
+	"0010000001100000","1100000000100000",
+	/*S型2-3*/
+	"0000001011100000","0010100011000000",
+	/*I型4-5*/
+	"1111000001110111","1011101100110011",
+	/*方型6*/
+	"0000000000000000",
+	/*T型7-10*/
+	"1010000011000000","1010001000100000","0000100010000000","0100001001100000",
+	/*L型11-14*/
+	"0100000011100000","1000110000000000","0000010011100000","1010101000000000",
+	/*J型15-18*/
+	"0110000011100000","1010101000100000","0000110011000000","1000101000100000"
+};
+short Alter(short n)
+{
+	switch(n)
+	{
+	case 1:case 3:case 5:return n-1;break;
+	case 6:return 6;break;
+	case 10:case 14:case 18:return n-3;break;
+	default:return n+1;break;
+	}
+}
+void SetPos(short x,short y)//传入坐标
+{
+	crd.X=x;crd.Y=y;
+	SetConsoleCursorPosition(handle,crd);//句柄要先使用GetStdHandle函数
+}
+void SetColor(short front,short back)//前景色，背景色
+{
+	SetConsoleTextAttribute(handle,front+back*0x10);
+}
+void PrintGameOver()
+{
+	SetPos(12,9);
+	SetColor(5,6);
+	cout<<" Game Over! ";
+	SetColor(7,0);
+}
+class Score
+{
+private:
+	short ln;//得分
+public:
+	void Reset(){ln=0;};
+	void Print()
+	{
+		SetPos(4,1);
+		SetColor(2,7);
+		cout<<" Lines: "<<ln<<" ";
+		SetColor(7,0);
+	}
+	Score(){Reset();}
+	void Update(short n){ln+=n;}
+};
+class Shape//方块形状
+{
+private:
+	short present;//当前形状（取值0-18）
+	short color;
+	short x;//左上角横坐标
+	short y;//左上角纵坐标
+public:
+	Shape(short,short,short);//第一个参数传入方块的颜色，后两个参数是x,y坐标
+	void Draw(bool,bool);//第一个参数为真执行绘制操作，为假执行擦除操作，第二个参数为真按方块的颜色画，为假画成白色
+	friend class Board;
+	bool Rotate(Board&brd);//判断一个方块能否旋转，如果能，把旋转操作完成并返回真
+	short Collision(Board&brd);//左侧，右侧，下方受阻时，返回值分别“位或”1,2,4
+	bool Move(short,Board&brd);//左移动第一个参数为1,右移动为2
+	bool Fall(Board&brd);//能下落返回true, 不能下落返回false
+	void DrawElsewhere(short _x,short _y);//在操作区外显示一个方块的初始形状
+};
+class Board//游戏框类
+{
+private:
+	bool wall[22][14];//取值为真，表明该位置已被占据，为假表明该位置是空的
+	short bottom_line;//保存当前可以消除的最下面一行的行号
+public:
+	void Clear()//重置数组元素的值
+	{
+		for(short i=0;i<22;i++)//行遍历
+			for(short j=0;j<14;j++)
+				if(j>1&&j<12&&i<20)
+					wall[i][j]=0;
+				else
+					wall[i][j]=1;
+	}
+	Board(){Clear();}
+	void DrawBoard()
+	{
+		short i;
+		SetColor(0xe,0);
+		for(i=0;i<21;i++)//绘制左边界
+		{
+			SetPos(LMARGIN-2,TMARGIN+i-1);
+			cout<<"■";
+		}
+		for(i=0;i<21;i++)
+		{
+			SetPos(LMARGIN+20,TMARGIN+i-1);
+			cout<<"■";
+		}
+		for(i=0;i<10;i++)
+		{
+			SetPos(LMARGIN+i*2,TMARGIN+19);
+			cout<<"■";
+		}
+		SetColor(7,0);
+	}
+	short SetBlockValue(Shape&shp)//对wall数组的值进行更新
+	{
+		for(short i=0;i<16;i++)
+			if(type[shp.present][i]=='1')
+			{
+				if(shp.y==0) return -1;//game over
+				wall[shp.y+i/4][shp.x+i%4]=true;
+			}
+		return 0;
+	}
+	short Drop(Shape&shp)//返回可以消除的行数
+	{
+		short i,n;//i用于遍历方块的所在的16个字符，n用来保存检测过的被方块占用了的格子数
+		short j;//j用于遍历一整行检查是否有wall数组的元素为false
+		short k;//用于从下往上逐行往下覆盖
+		short y,_y=-1;//y用于保存当前格子的行号，_y保存前一个格子的行号，初始化为一个不合理值-1
+		short lines=0;//保存消除了多少排
+		short top;//检测有没有遍历到堆积块顶部
+		short l;//在覆盖的操作当中从左到右进行遍历
+		for(i=0,n=0;n<4&&i<16;i++)
+		{
+			if(type[shp.present][i]=='1')
+			{
+				y=shp.y+i/4;
+				n++;
+				if(y==_y) continue;//同一行的格子不用再检查
+				_y=y;//将当前格的行号赋给_y;
+				for(j=2;j<12;j++)
+					if(!wall[y][j])break;
+				if(j==12)//一整排已经填满，应该消除这一排
+				{
+					lines++;//消除的横排数更新
+					for(k=y;k>0;k--)
+					{
+						top=0;
+						for(l=2;l<12;l++)
+						{
+							wall[k][l]=wall[k-1][l];
+							top+=wall[k-1][l];
+						}
+						if(top==0) break;//已经到了堆积部顶部，中止从下往上的遍历
+					}
+				}
+			}
+		}
+		bottom_line=_y;
+		return lines;
+	}
+	void DrawPile()//重绘堆积块，由bottom_line指定需要重绘的最下面一行
+	{
+		for(short i=0;i<=bottom_line;i++)//行遍历
+		{
+			for(short j=2;j<12;j++)//列遍历
+			{
+				SetPos(LMARGIN-4+j*2,TMARGIN-1+i);
+				if(wall[i][j])
+				{
+					SetColor(7,7);//白色，用于绘出
+					cout<<"□";
+				}
+				else
+				{
+					SetColor(0,0);//黑色，用于擦除
+					cout<<"  ";
+				}
+			}
+		}
+	}
+	friend class Shape;
+};
+Shape::Shape(short _color,short _x=5,short _y=0):color(_color),x(_x),y(_y)//第一个参数颜色值将会成为决定方块形状的因素
+{
+	switch(_color)
+	{
+	case 1:present=0;break;
+	case 2:present=2;break;
+	case 3:present=4;break;
+	case 4:present=6;break;
+	case 5:present=7;break;
+	case 6:present=11;break;
+	default:color=8;present=15;break;
+	}
+}
+void Shape::Draw(bool flag=true,bool active=true)
+{
+	if(!flag)//擦除
+		SetColor(0,0);
+	else
+		if(active) SetColor(color,color);//按自己的颜色画
+		else SetColor(7,7);//已着地的方块画成白色
+	for(short i=0;i<16;i++)
+		if(type[present][i]=='1')
+		{
+			SetPos(LMARGIN-4+(x+i%4)*2,TMARGIN+y+i/4-1);
+			cout<<"□";
+		}
+	SetColor(7,0);
+}
+bool Shape::Rotate(Board&brd)
+{
+	for(short i=0;i<16;i++)
+	{
+		if(brd.wall[y+i/4][x+i%4]&&rotate_hinder[present][i]=='1')
+			//如果格局中一个格子为真且该位置在方块的自身坐标中是能够阻碍旋转的
+			return false;
+	}
+	Draw(false);
+	present=Alter(present);
+	Draw();
+	return true;
+}
+short Shape::Collision(Board&brd)
+{
+	short result=0;
+	for(short i=0;i<16;i++)
+	{
+		if(type[present][i]=='1')//该格子被当前方块占用
+		{
+			if(brd.wall[y+i/4][x+i%4-1]) result|=1;//左受阻
+			if(brd.wall[y+i/4][x+i%4+1]) result|=2;//右受阻
+			if(brd.wall[y+i/4+1][x+i%4]) result|=4;//下方受阻
+		}
+	}
+	return result;
+}
+bool Shape::Move(short direction,Board&brd)
+{
+	if(direction==1&&!(Collision(brd)&1))//向左移动
+	{
+		Draw(false,true);
+		x--;
+		Draw();
+		return true;
+	}
+	if(direction==2&&!(Collision(brd)&2))//向右移动
+	{
+		Draw(false,true);
+		x++;
+		Draw();
+		return true;
+	}
+	return false;
+}
+bool Shape::Fall(Board&brd)
+{
+	if(Collision(brd)&4)//已经着地
+	{
+		Draw(true,false);//画成堆积块
+		return false;
+	}
+	Draw(false,true);
+	y++;
+	Draw();
+	return true;
+}
+void Shape::DrawElsewhere(short _x,short _y)
+{
+	short i;//循环变量
+	SetPos(_x,_y);
+	SetColor(7,0);
+	cout<<"Next: ";
+	_x+=6;
+	SetColor(0,0);
+	for(i=0;i<12;i++)//方块初始状态只绘制前三行，故此处写i<12, 此for循环用于擦掉前一次绘出的方块
+	{
+		SetPos(_x+i%4*2,_y+i/4);
+		cout<<"  ";
+	}
+	SetColor(color,color);//设置绘制颜色
+	_y-=(present==6||present==4);
+	for(i=0;i<12;i++)//此for循环用于画出下一个方块
+	{
+		if(type[present][i]=='1')
+		{
+			SetPos(_x+i%4*2,_y+i/4);
+			cout<<"□";
+		}
+	}
+}
+short Menu()//选中开始游戏返回1, 离开则返回2
+{
+	short choice=1;//用来跟踪用户选中的选项
+	char c;//用来记录用户的按键信息
+	system("cls");
+	SetPos(9,12);
+	cout<<"┌────────┐";
+	SetPos(9,13);
+	cout<<"│ 俄 罗 斯 方 块 │";
+	SetPos(9,14);
+	cout<<"└────────┘";
+	SetPos(7,21);
+	cout<<"按方向键控制方块";
+	SetPos(7,23);
+	cout<<"按空格键暂停/继续";
+	while(1)
+	{
+		SetPos(15,16);
+		if(choice==1) SetColor(2,7);
+		else SetColor(2,0);
+		cout<<" 开始游戏 ";
+		SetPos(15,18);
+		if(choice==2) SetColor(2,7);
+		else SetColor(2,0);
+		cout<<" 离    开 ";
+		c=getch();
+		if(c==VK_RETURN) break;//用户按下了回车，离开循环体
+		else
+			if(c==0) choice=getch();
+		if(c==72||c==80) choice=choice==1?2:1;//用户按了上，下键
+	}
+	SetColor(7,0);
+	return choice;
+}
+int main()
+{
+	system("mode con cols=35 lines=27");
+	handle=GetStdHandle(STD_OUTPUT_HANDLE);
+	Board board;
+	short tmp;//用来保存一个方块消去的行数
+	Shape*shp,*shp_next;
+	Score score;
+	short times;//用来保存执行Sleep()函数的次数
+	srand(time(0));//使游戏每一次运行时产生的方块不一样
+	char ch;//用来清空输入流文件
+	while(Menu()==1)//每执行一遍循环体就是游戏从开始到结束走了一遍
+	{
+		system("cls");//擦掉菜单内容
+		board.Clear();
+		board.DrawBoard();
+		score.Reset();//得分归0
+		score.Print();//显示得分
+		shp_next=new Shape(rand()%7+1);
+		while(1)//每执行一遍循环体就是一个方块从产生到着地的一个过程
+		{
+			shp=shp_next;//将下一方块赋给当前方块
+			shp_next=new Shape(rand()%7+1);//新产生下一方块
+			shp_next->DrawElsewhere(17,1);//显示出下一方块
+			times=0;
+			while(1)//每执行一遍循环体就是捕捉一次按键行为的过程, 每循环十次方块下落一格
+			{
+				shp->Draw();
+				if(GetAsyncKeyState(VK_LEFT)==-32767)//VK_LEFT是左方向键的虚拟键码
+					shp->Move(1,board);
+				if(GetAsyncKeyState(VK_RIGHT)==-32767)//VK_RIGHT是右方向键的虚拟键码
+					shp->Move(2,board);
+				if(GetAsyncKeyState(VK_UP)==-32767)//向上方向键，执行旋转
+					shp->Rotate(board);
+				if(GetAsyncKeyState(VK_DOWN)==-32767)//加速掉落
+					shp->Fall(board);
+				if(GetAsyncKeyState(VK_SPACE)==-32767)//空格键暂停
+				{
+					while(!(GetAsyncKeyState(VK_SPACE)==-32767)) Sleep(25);
+				}
+				Sleep(25);//延时
+				times++;
+				if(times==10)
+				{
+					times=0;
+					if(!shp->Fall(board)) break;
+				}
+			}
+			if(board.SetBlockValue(*shp)==-1)
+			{
+				PrintGameOver();
+				fflush(stdin);
+				while((ch=getchar())!='\n'&&ch!=EOF);
+				delete shp_next;
+				break;
+			}
+			if(tmp=board.Drop(*shp))
+			{
+				board.DrawPile();
+				score.Update(tmp);//累加得分
+				score.Print();//显示得分
+			}
+			//.....
+			delete shp;
+		}
+	}
+	return 0;
+}
